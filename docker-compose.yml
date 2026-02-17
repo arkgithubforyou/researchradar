@@ -1,0 +1,65 @@
+services:
+  # ── ResearchRadar API ──────────────────────────────────────────────
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file: .env
+    environment:
+      SQLITE_DB_PATH: /app/data/researchradar.db
+      CHROMA_DB_PATH: /app/data/chroma_db
+      OLLAMA_HOST: http://ollama:11434
+    volumes:
+      - app-data:/app/data
+      - model-cache:/app/.cache/huggingface
+    depends_on:
+      ollama:
+        condition: service_started
+    restart: unless-stopped
+
+  # ── Ollama (local LLM) ────────────────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-models:/root/.ollama
+    restart: unless-stopped
+    # Pull Qwen2.5-14B on first startup (or use a smaller model)
+    # Run manually: docker compose exec ollama ollama pull qwen2.5:14b
+
+  # ── Ingestion worker (one-shot) ────────────────────────────────────
+  ingest:
+    build: .
+    env_file: .env
+    environment:
+      SQLITE_DB_PATH: /app/data/researchradar.db
+      CHROMA_DB_PATH: /app/data/chroma_db
+    volumes:
+      - app-data:/app/data
+      - model-cache:/app/.cache/huggingface
+    entrypoint: ["python", "scripts/setup_db.py"]
+    profiles:
+      - setup
+
+  # ── Enrichment worker (one-shot) ───────────────────────────────────
+  enrich:
+    build: .
+    env_file: .env
+    environment:
+      SQLITE_DB_PATH: /app/data/researchradar.db
+      CHROMA_DB_PATH: /app/data/chroma_db
+      OLLAMA_HOST: http://ollama:11434
+    volumes:
+      - app-data:/app/data
+      - model-cache:/app/.cache/huggingface
+    entrypoint: ["python", "scripts/enrich.py", "--mode", "llm", "--backend", "groq", "--show-stats"]
+    depends_on:
+      - ollama
+    profiles:
+      - tools
+
+volumes:
+  app-data:
+  model-cache:
+  ollama-models:
