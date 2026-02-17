@@ -1,0 +1,17 @@
+# Oracle Cloud Infrastructure credentials
+# Get these from: OCI Console → Profile → My Profile / API Keys / Tenancy
+tenancy_ocid     = "ocid1.tenancy.oc1..aaaaaa..."
+user_ocid        = "ocid1.user.oc1..aaaaaa..."
+fingerprint      = "aa:bb:cc:dd:ee:ff:00:11:22:33:44:55:66:77:88:99"
+private_key_path = "~/.oci/oci_api_key.pem"
+region           = "us-ashburn-1"
+compartment_ocid = "ocid1.tenancy.oc1..aaaaaa..."  # Use tenancy OCID for root compartment
+
+# SSH key for VM access (paste your full public key)
+ssh_public_key = "ssh-ed25519 AAAA... you@machine"
+
+# Groq API key (free at console.groq.com)
+groq_api_key = "gsk_..."
+
+# Optional: custom domain (must already point to the VM's IP via DNS)
+# domain_name = "researchradar.yourdomain.com"

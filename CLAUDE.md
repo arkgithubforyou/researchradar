@@ -120,6 +120,25 @@ Services: `api` (FastAPI :8000), `ollama` (LLM :11434), `ingest`/`enrich` (one-s
 
 ## Infrastructure (Terraform)
 
+Two deployment options:
+
+### Oracle Cloud — Always Free ($0/month, recommended for demos)
+
+`terraform-oci/` — Oracle Cloud A1 ARM VM. `terraform apply` creates:
+
+- **Compute**: VM.Standard.A1.Flex (2 OCPU, 12 GB RAM — within Always Free limits)
+- **Networking**: VCN, public subnet, internet gateway, security list (80/443/22)
+- **Auto-setup**: cloud-init installs Docker, Nginx, Let's Encrypt, clones repo, builds and runs container
+- **Redeploy**: SSH in, run `/opt/researchradar/redeploy.sh` to pull latest and rebuild
+
+```bash
+cd terraform-oci
+cp terraform.tfvars.example terraform.tfvars  # fill in your OCI credentials
+terraform init && terraform apply
+```
+
+### AWS — ECS Fargate (~$100/month, enterprise-grade)
+
 `terraform/` — AWS ECS Fargate deployment. `terraform apply` creates:
 
 - **Networking**: VPC, 2 AZ public/private subnets, NAT gateway, internet gateway

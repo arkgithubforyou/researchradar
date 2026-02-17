@@ -33,11 +33,19 @@ env/
 .DS_Store
 Thumbs.db
 
-# Terraform
+# Terraform (AWS)
 terraform/.terraform/
 terraform/*.tfstate
 terraform/*.tfstate.backup
 terraform/*.tfvars
+
+# Terraform (Oracle Cloud)
+terraform-oci/.terraform/
+terraform-oci/*.tfstate
+terraform-oci/*.tfstate.backup
+terraform-oci/*.tfvars
+!terraform-oci/*.tfvars.example
+*.pem
 
 # Frontend
 frontend/node_modules/
