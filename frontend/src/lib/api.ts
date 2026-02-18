@@ -88,7 +88,7 @@ export function getTrend(
   type: EntityType,
   req: TrendRequest,
 ): Promise<TrendResponse> {
-  return request(`/analytics/trends/${type}`, {
+  return request(`/analytics/${type}/trend`, {
     method: "POST",
     body: JSON.stringify(req),
   });
@@ -98,14 +98,18 @@ export function getTop(
   type: EntityType,
   params?: { year?: number; limit?: number },
 ): Promise<RankedEntity[]> {
-  return request(`/analytics/top/${type}${qs(params ?? {})}`);
+  const { limit, ...rest } = params ?? {};
+  const mapped = { ...rest, ...(limit != null ? { top_n: limit } : {}) };
+  return request(`/analytics/${type}/top${qs(mapped)}`);
 }
 
 export function getCooccurrence(
   type: CooccurrenceType,
   params?: { limit?: number },
 ): Promise<CooccurrenceRow[]> {
-  return request(`/analytics/cooccurrence/${type}${qs(params ?? {})}`);
+  const { limit, ...rest } = params ?? {};
+  const mapped = { ...rest, ...(limit != null ? { top_n: limit } : {}) };
+  return request(`/analytics/cooccurrence/${type}${qs(mapped)}`);
 }
 
 export function getStats(): Promise<EnrichmentStats> {
