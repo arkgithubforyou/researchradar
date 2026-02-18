@@ -23,7 +23,35 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
-# ── Stage 3: Runtime ────────────────────────────────────────────────
+# ── Stage 3: Seed data (download papers, embed, enrich) ─────────────
+FROM python:3.12-slim AS seeder
+
+WORKDIR /app
+
+# Copy installed packages
+COPY --from=builder /install /usr/local
+
+# Git is needed by acl-anthology to clone metadata repo
+RUN apt-get update && apt-get install -y --no-install-recommends git && \
+    rm -rf /var/lib/apt/lists/*
+
+# NLTK data
+RUN python -m nltk.downloader -d /usr/share/nltk_data punkt punkt_tab
+ENV NLTK_DATA=/usr/share/nltk_data
+
+# Copy source code for ingestion
+COPY src/ ./src/
+COPY scripts/ ./scripts/
+
+# Env for seeder
+ENV PYTHONUNBUFFERED=1
+ENV SQLITE_DB_PATH=/app/data/researchradar.db
+ENV CHROMA_DB_PATH=/app/data/chroma_db
+
+# Run ingestion: 500 recent papers, chunked, embedded, enriched
+RUN python scripts/seed_data.py --max-papers 500 --year-from 2022 --year-to 2024
+
+# ── Stage 4: Runtime ────────────────────────────────────────────────
 FROM python:3.12-slim
 
 WORKDIR /app
@@ -48,12 +76,13 @@ COPY --chown=user scripts/ ./scripts/
 # Copy frontend build
 COPY --chown=user --from=frontend /frontend/dist ./frontend/dist
 
-# Data dir — writable by user
-RUN mkdir -p /app/data && chown user:user /app/data
+# Copy pre-built data from seeder (SQLite DB + ChromaDB + model cache)
+COPY --chown=user --from=seeder /app/data ./data
+COPY --chown=user --from=seeder /root/.cache/huggingface /app/.cache/huggingface
 
 # Model cache
 ENV HF_HOME=/app/.cache/huggingface
-RUN mkdir -p /app/.cache/huggingface && chown -R user:user /app/.cache
+RUN chown -R user:user /app/.cache
 
 # Default to Groq (cloud LLM) — key set via HF Spaces secrets
 ENV LLM_BACKEND=groq
