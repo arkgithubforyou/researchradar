@@ -33,6 +33,7 @@ def init_components(config: Config | None = None) -> None:
 
     _config = config or get_config()
     _db = SQLiteDB(_config.sqlite_db_path)
+    _db.create_schema()  # Ensure tables exist (idempotent)
     _chroma = ChromaStore(_config.chroma_db_path)
 
     # Embedding generator
