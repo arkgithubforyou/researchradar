@@ -1,0 +1,69 @@
+# Hugging Face Spaces Dockerfile
+# Free tier: 2 vCPU, 16 GB RAM, 50 GB ephemeral disk
+# Must listen on port 7860, runs as UID 1000
+
+# ── Stage 1: Build frontend ─────────────────────────────────────────
+FROM node:22-slim AS frontend
+
+WORKDIR /frontend
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN npm ci --no-audit --no-fund 2>/dev/null || npm install --no-audit --no-fund
+COPY frontend/ .
+RUN npm run build
+
+# ── Stage 2: Build Python dependencies ──────────────────────────────
+FROM python:3.12-slim AS builder
+
+WORKDIR /build
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc g++ && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+
+# ── Stage 3: Runtime ────────────────────────────────────────────────
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Copy installed packages from builder
+COPY --from=builder /install /usr/local
+
+# NLTK data (punkt tokenizer for BM25)
+RUN python -m nltk.downloader -d /usr/share/nltk_data punkt punkt_tab
+
+ENV NLTK_DATA=/usr/share/nltk_data
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+# HF Spaces runs as UID 1000 — create matching user
+RUN useradd -m -u 1000 user
+
+# Copy application code (owned by user)
+COPY --chown=user src/ ./src/
+COPY --chown=user scripts/ ./scripts/
+
+# Copy frontend build
+COPY --chown=user --from=frontend /frontend/dist ./frontend/dist
+
+# Data dir — writable by user
+RUN mkdir -p /app/data && chown user:user /app/data
+
+# Model cache
+ENV HF_HOME=/app/.cache/huggingface
+RUN mkdir -p /app/.cache/huggingface && chown -R user:user /app/.cache
+
+# Default to Groq (cloud LLM) — key set via HF Spaces secrets
+ENV LLM_BACKEND=groq
+ENV SQLITE_DB_PATH=/app/data/researchradar.db
+ENV CHROMA_DB_PATH=/app/data/chroma_db
+
+USER user
+ENV HOME=/home/user
+ENV PATH=/home/user/.local/bin:$PATH
+
+EXPOSE 7860
+
+CMD ["uvicorn", "src.api.app:app", "--host", "0.0.0.0", "--port", "7860"]

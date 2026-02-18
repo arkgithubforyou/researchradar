@@ -120,7 +120,22 @@ Services: `api` (FastAPI :8000), `ollama` (LLM :11434), `ingest`/`enrich` (one-s
 
 ## Infrastructure (Terraform)
 
-Two deployment options:
+Three deployment options:
+
+### Hugging Face Spaces — Free ($0/month, easiest)
+
+`Dockerfile.hf` + `scripts/deploy_hf.sh` — Docker Space on HF free tier (2 vCPU, 16 GB RAM).
+
+```bash
+# One-time: create Space at huggingface.co/new-space (Docker SDK, CPU basic)
+# Set GROQ_API_KEY as a Secret in Space Settings
+huggingface-cli login
+./scripts/deploy_hf.sh <username>/researchradar
+```
+
+- Sleeps after 48h inactivity; `.github/workflows/keep-alive.yml` pings every 12h to prevent this
+- Set `HF_SPACE_URL` as a GitHub repo variable for the keep-alive to work
+- Redeployments: re-run `deploy_hf.sh` or push to the HF Space repo directly
 
 ### Oracle Cloud — Always Free ($0/month, recommended for demos)
 
