@@ -23,33 +23,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
-# ── Stage 3: Seed data (download papers, embed, enrich) ─────────────
-FROM python:3.12-slim AS seeder
+# ── Stage 3: Download pre-built data from HF dataset ────────────────
+FROM python:3.12-slim AS data
 
-WORKDIR /app
+WORKDIR /data
 
-# Copy installed packages
-COPY --from=builder /install /usr/local
+# Install huggingface_hub for downloading
+RUN pip install --no-cache-dir huggingface_hub
 
-# Git is needed by acl-anthology to clone metadata repo
-RUN apt-get update && apt-get install -y --no-install-recommends git && \
-    rm -rf /var/lib/apt/lists/*
-
-# NLTK data
-RUN python -m nltk.downloader -d /usr/share/nltk_data punkt punkt_tab
-ENV NLTK_DATA=/usr/share/nltk_data
-
-# Copy source code for ingestion
-COPY src/ ./src/
-COPY scripts/ ./scripts/
-
-# Env for seeder
-ENV PYTHONUNBUFFERED=1
-ENV SQLITE_DB_PATH=/app/data/researchradar.db
-ENV CHROMA_DB_PATH=/app/data/chroma_db
-
-# Run ingestion: all major-venue ACL Anthology papers, chunked, embedded, enriched
-RUN python scripts/seed_data.py
+# Download pre-built SQLite DB and ChromaDB from HF dataset repo
+RUN python -c "\
+from huggingface_hub import snapshot_download; \
+snapshot_download( \
+    repo_id='thearkforyou/researchradar-data', \
+    repo_type='dataset', \
+    local_dir='/data', \
+    allow_patterns=['researchradar.db', 'chroma_db/**'], \
+)"
 
 # ── Stage 4: Runtime ────────────────────────────────────────────────
 FROM python:3.12-slim
@@ -76,13 +66,16 @@ COPY --chown=user scripts/ ./scripts/
 # Copy frontend build
 COPY --chown=user --from=frontend /frontend/dist ./frontend/dist
 
-# Copy pre-built data from seeder (SQLite DB + ChromaDB + model cache)
-COPY --chown=user --from=seeder /app/data ./data
-COPY --chown=user --from=seeder /root/.cache/huggingface /app/.cache/huggingface
+# Copy pre-built data from the data stage
+COPY --chown=user --from=data /data/researchradar.db ./data/researchradar.db
+COPY --chown=user --from=data /data/chroma_db ./data/chroma_db
 
-# Model cache
+# Model cache — download embedding model at build time for fast startup
 ENV HF_HOME=/app/.cache/huggingface
-RUN chown -R user:user /app/.cache
+RUN mkdir -p /app/.cache/huggingface && \
+    python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('BAAI/bge-base-en-v1.5')" && \
+    python -c "from sentence_transformers import CrossEncoder; CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')" && \
+    chown -R user:user /app/.cache
 
 # Default to Groq (cloud LLM) — key set via HF Spaces secrets
 ENV LLM_BACKEND=groq
