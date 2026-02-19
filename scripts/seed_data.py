@@ -1,11 +1,13 @@
 """Build-time data seeding for HF Spaces deployment.
 
-Downloads a small set of recent ACL papers, ingests them into SQLite + ChromaDB,
+Downloads ACL Anthology papers, ingests them into SQLite + ChromaDB,
 and runs regex-based entity enrichment. Designed to run during Docker build
-so the Space starts with demo data.
+so the Space starts with data ready to query.
 
 Usage:
-    python scripts/seed_data.py [--max-papers 500] [--year-from 2022] [--year-to 2024]
+    python scripts/seed_data.py                            # All major-venue papers (no limit)
+    python scripts/seed_data.py --max-papers 500           # Quick demo subset
+    python scripts/seed_data.py --year-from 2020 --year-to 2024
 """
 
 import argparse
@@ -34,9 +36,12 @@ DEMO_VENUES = ["acl", "emnlp", "naacl", "findings", "eacl", "coling"]
 
 def main():
     parser = argparse.ArgumentParser(description="Seed ResearchRadar with demo data")
-    parser.add_argument("--max-papers", type=int, default=500)
-    parser.add_argument("--year-from", type=int, default=2022)
-    parser.add_argument("--year-to", type=int, default=2024)
+    parser.add_argument("--max-papers", type=int, default=None,
+                        help="Max papers to load (default: no limit)")
+    parser.add_argument("--year-from", type=int, default=None,
+                        help="Earliest year to include")
+    parser.add_argument("--year-to", type=int, default=None,
+                        help="Latest year to include")
     args = parser.parse_args()
 
     config = get_config()
