@@ -1,11 +1,12 @@
 import { Outlet, NavLink } from "react-router-dom";
-import { Search, BookOpen, BarChart3, Radar } from "lucide-react";
+import { Search, BookOpen, BarChart3, Radar, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { to: "/", label: "Search", icon: Search, end: true },
   { to: "/browse", label: "Papers", icon: BookOpen },
   { to: "/dashboard", label: "Dashboard", icon: BarChart3 },
+  { to: "/about", label: "About", icon: Info },
 ] as const;
 
 export default function Layout() {

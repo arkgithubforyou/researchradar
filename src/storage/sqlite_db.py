@@ -335,22 +335,25 @@ class SQLiteDB:
         finally:
             conn.close()
 
-    def browse_papers(
+    def _browse_conditions(
         self,
         venue: str | None = None,
+        volume: str | None = None,
         year: int | None = None,
         method: str | None = None,
         dataset: str | None = None,
-        limit: int = 20,
-        offset: int = 0,
-    ) -> list[dict]:
-        """Browse/filter papers with optional filters."""
-        conditions = []
-        params = []
+        author: str | None = None,
+    ) -> tuple[str, list]:
+        """Build WHERE clause and params for paper browsing/counting."""
+        conditions: list[str] = []
+        params: list = []
 
         if venue:
             conditions.append("p.venue = ?")
             params.append(venue)
+        if volume:
+            conditions.append("p.volume = ?")
+            params.append(volume)
         if year:
             conditions.append("p.year = ?")
             params.append(year)
@@ -364,8 +367,31 @@ class SQLiteDB:
                 "p.id IN (SELECT paper_id FROM datasets WHERE dataset_name LIKE ?)"
             )
             params.append(f"%{dataset}%")
+        if author:
+            conditions.append(
+                "p.id IN (SELECT paper_id FROM authors WHERE name LIKE ?)"
+            )
+            params.append(f"%{author}%")
 
         where_clause = " AND ".join(conditions) if conditions else "1=1"
+        return where_clause, params
+
+    def browse_papers(
+        self,
+        venue: str | None = None,
+        volume: str | None = None,
+        year: int | None = None,
+        method: str | None = None,
+        dataset: str | None = None,
+        author: str | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> list[dict]:
+        """Browse/filter papers with optional filters."""
+        where_clause, params = self._browse_conditions(
+            venue=venue, volume=volume, year=year,
+            method=method, dataset=dataset, author=author,
+        )
         params.extend([limit, offset])
 
         conn = self.get_connection()
@@ -382,7 +408,46 @@ class SQLiteDB:
         finally:
             conn.close()
 
+    def count_papers(
+        self,
+        venue: str | None = None,
+        volume: str | None = None,
+        year: int | None = None,
+        method: str | None = None,
+        dataset: str | None = None,
+        author: str | None = None,
+    ) -> int:
+        """Count papers matching the given filters."""
+        where_clause, params = self._browse_conditions(
+            venue=venue, volume=volume, year=year,
+            method=method, dataset=dataset, author=author,
+        )
+        conn = self.get_connection()
+        try:
+            row = conn.execute(
+                f"SELECT COUNT(*) FROM papers p WHERE {where_clause}",
+                params,
+            ).fetchone()
+            return row[0]
+        finally:
+            conn.close()
+
     # ── Analytical queries (trend analytics) ─────────────────────────
+
+    def papers_per_venue(self) -> list[dict]:
+        """Paper count per venue, aggregated across all years."""
+        conn = self.get_connection()
+        try:
+            rows = conn.execute(
+                """SELECT venue, COUNT(*) as paper_count
+                   FROM papers
+                   WHERE venue IS NOT NULL
+                   GROUP BY venue
+                   ORDER BY paper_count DESC"""
+            ).fetchall()
+            return [dict(row) for row in rows]
+        finally:
+            conn.close()
 
     def papers_per_venue_per_year(self) -> list[dict]:
         conn = self.get_connection()

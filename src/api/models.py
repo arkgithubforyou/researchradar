@@ -20,9 +20,11 @@ class PaperBrowseRequest(BaseModel):
     """Filters for browsing papers."""
 
     venue: str | None = None
+    volume: str | None = None
     year: int | None = Field(default=None, ge=1900, le=2100)
     method: str | None = None
     dataset: str | None = None
+    author: str | None = None
     limit: int = Field(default=20, ge=1, le=100)
     offset: int = Field(default=0, ge=0)
 

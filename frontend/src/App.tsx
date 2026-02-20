@@ -4,6 +4,7 @@ import SearchPage from "./pages/SearchPage";
 import BrowsePage from "./pages/BrowsePage";
 import PaperPage from "./pages/PaperPage";
 import DashboardPage from "./pages/DashboardPage";
+import AboutPage from "./pages/AboutPage";
 
 export default function App() {
   return (
@@ -13,6 +14,7 @@ export default function App() {
         <Route path="browse" element={<BrowsePage />} />
         <Route path="paper/:paperId" element={<PaperPage />} />
         <Route path="dashboard" element={<DashboardPage />} />
+        <Route path="about" element={<AboutPage />} />
       </Route>
     </Routes>
   );

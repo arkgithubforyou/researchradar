@@ -6,7 +6,7 @@ import {
   Tag,
   BookOpen,
 } from "lucide-react";
-import { getGrowth, getTop, getVenues, getStats } from "@/lib/api";
+import { getGrowth, getTop, getVenuesTotals, getStats } from "@/lib/api";
 import { useAsync } from "@/lib/hooks";
 import { formatCount } from "@/lib/utils";
 import StatCard from "@/components/StatCard";
@@ -20,7 +20,7 @@ import CooccurrenceTable from "@/components/CooccurrenceTable";
 export default function DashboardPage() {
   const { data: stats, loading: statsLoading } = useAsync(() => getStats(), []);
   const { data: growth, loading: growthLoading } = useAsync(() => getGrowth(), []);
-  const { data: venues, loading: venuesLoading } = useAsync(() => getVenues(), []);
+  const { data: venues, loading: venuesLoading } = useAsync(() => getVenuesTotals(), []);
   const { data: topMethods, loading: methodsLoading } = useAsync(
     () => getTop("methods", { limit: 10 }),
     [],

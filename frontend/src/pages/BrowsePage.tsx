@@ -9,8 +9,8 @@ import {
   Clock,
 } from "lucide-react";
 import { getPapers } from "@/lib/api";
-import { useAsync } from "@/lib/hooks";
-import { venueLabel, truncate } from "@/lib/utils";
+import { useAsync, useDebounce } from "@/lib/hooks";
+import { venueLabel, truncate, VENUES } from "@/lib/utils";
 import Spinner from "@/components/Spinner";
 import ErrorAlert from "@/components/ErrorAlert";
 import EmptyState from "@/components/EmptyState";
@@ -20,18 +20,28 @@ const PAGE_SIZE = 20;
 export default function BrowsePage() {
   const [venue, setVenue] = useState("");
   const [year, setYear] = useState("");
+  const [method, setMethod] = useState("");
+  const [dataset, setDataset] = useState("");
+  const [author, setAuthor] = useState("");
   const [page, setPage] = useState(0);
+
+  const debouncedMethod = useDebounce(method, 300);
+  const debouncedDataset = useDebounce(dataset, 300);
+  const debouncedAuthor = useDebounce(author, 300);
 
   const params = {
     venue: venue || null,
     year: year ? Number(year) : null,
+    method: debouncedMethod || null,
+    dataset: debouncedDataset || null,
+    author: debouncedAuthor || null,
     limit: PAGE_SIZE,
     offset: page * PAGE_SIZE,
   };
 
   const { data, loading, error } = useAsync(
     () => getPapers(params),
-    [venue, year, page],
+    [venue, year, debouncedMethod, debouncedDataset, debouncedAuthor, page],
   );
 
   const handleFilterChange = useCallback(() => {
@@ -39,6 +49,7 @@ export default function BrowsePage() {
   }, []);
 
   const totalPages = data ? Math.ceil(data.count / PAGE_SIZE) : 0;
+  const hasFilters = venue || year || method || dataset || author;
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -47,7 +58,9 @@ export default function BrowsePage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Paper Browser</h1>
           <p className="text-sm text-gray-500 mt-1">
-            {data ? `${data.count.toLocaleString()} papers` : "Loading..."}
+            {data
+              ? `${data.count.toLocaleString()} papers found`
+              : "Loading..."}
           </p>
         </div>
       </div>
@@ -65,13 +78,14 @@ export default function BrowsePage() {
               setVenue(e.target.value);
               handleFilterChange();
             }}
-            className="input !w-40 !py-2 text-sm"
+            className="input !w-48 !py-2 text-sm"
           >
             <option value="">All venues</option>
-            <option value="acl">ACL</option>
-            <option value="emnlp">EMNLP</option>
-            <option value="naacl">NAACL</option>
-            <option value="findings">Findings</option>
+            {VENUES.map((v) => (
+              <option key={v.value} value={v.value}>
+                {v.label}
+              </option>
+            ))}
           </select>
 
           <select
@@ -90,11 +104,47 @@ export default function BrowsePage() {
             ))}
           </select>
 
-          {(venue || year) && (
+          <input
+            type="text"
+            value={method}
+            onChange={(e) => {
+              setMethod(e.target.value);
+              handleFilterChange();
+            }}
+            placeholder="Method (e.g. BERT)"
+            className="input !w-40 !py-2 text-sm"
+          />
+
+          <input
+            type="text"
+            value={dataset}
+            onChange={(e) => {
+              setDataset(e.target.value);
+              handleFilterChange();
+            }}
+            placeholder="Dataset (e.g. SQuAD)"
+            className="input !w-40 !py-2 text-sm"
+          />
+
+          <input
+            type="text"
+            value={author}
+            onChange={(e) => {
+              setAuthor(e.target.value);
+              handleFilterChange();
+            }}
+            placeholder="Author (e.g. last name)"
+            className="input !w-44 !py-2 text-sm"
+          />
+
+          {hasFilters && (
             <button
               onClick={() => {
                 setVenue("");
                 setYear("");
+                setMethod("");
+                setDataset("");
+                setAuthor("");
                 handleFilterChange();
               }}
               className="text-sm text-brand-600 hover:text-brand-700 font-medium"

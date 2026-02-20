@@ -165,6 +165,7 @@ class TestSearchEndpoint:
 
 class TestPapersEndpoints:
     def test_browse_papers_default(self, client, mock_db):
+        mock_db.count_papers.return_value = 1
         mock_db.browse_papers.return_value = [
             {
                 "id": "test::1", "title": "Paper A", "abstract": "Abstract A",
@@ -179,23 +180,42 @@ class TestPapersEndpoints:
         assert data["offset"] == 0
 
     def test_browse_papers_with_filters(self, client, mock_db):
+        mock_db.count_papers.return_value = 0
         mock_db.browse_papers.return_value = []
         resp = client.get("/api/papers", params={
             "venue": "emnlp", "year": 2022, "limit": 5, "offset": 10,
         })
         assert resp.status_code == 200
         mock_db.browse_papers.assert_called_once_with(
-            venue="emnlp", year=2022, method=None, dataset=None,
-            limit=5, offset=10,
+            venue="emnlp", volume=None, year=2022, method=None,
+            dataset=None, author=None, limit=5, offset=10,
         )
 
     def test_browse_papers_with_method_filter(self, client, mock_db):
+        mock_db.count_papers.return_value = 0
         mock_db.browse_papers.return_value = []
         resp = client.get("/api/papers", params={"method": "BERT"})
         assert resp.status_code == 200
         mock_db.browse_papers.assert_called_once()
         call_kwargs = mock_db.browse_papers.call_args.kwargs
         assert call_kwargs["method"] == "BERT"
+
+    def test_browse_papers_with_author_filter(self, client, mock_db):
+        mock_db.count_papers.return_value = 0
+        mock_db.browse_papers.return_value = []
+        resp = client.get("/api/papers", params={"author": "Smith"})
+        assert resp.status_code == 200
+        call_kwargs = mock_db.browse_papers.call_args.kwargs
+        assert call_kwargs["author"] == "Smith"
+
+    def test_browse_papers_with_volume_filter(self, client, mock_db):
+        mock_db.count_papers.return_value = 0
+        mock_db.browse_papers.return_value = []
+        resp = client.get("/api/papers", params={"venue": "findings", "volume": "acl"})
+        assert resp.status_code == 200
+        call_kwargs = mock_db.browse_papers.call_args.kwargs
+        assert call_kwargs["venue"] == "findings"
+        assert call_kwargs["volume"] == "acl"
 
     def test_get_paper_found(self, client, mock_db):
         mock_db.get_paper_by_id.return_value = {
@@ -338,6 +358,17 @@ class TestAnalyticsEndpoints:
         ]
         resp = client.get("/api/analytics/venues")
         assert resp.status_code == 200
+
+    def test_venue_totals(self, client, mock_db):
+        mock_db.papers_per_venue.return_value = [
+            {"venue": "acl", "paper_count": 100},
+            {"venue": "emnlp", "paper_count": 80},
+        ]
+        resp = client.get("/api/analytics/venues-total")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 2
+        assert data[0]["venue"] == "acl"
 
 
 # ── Trend request validation ─────────────────────────────────────────

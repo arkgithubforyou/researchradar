@@ -168,3 +168,9 @@ def year_over_year_growth(db: SQLiteDB = Depends(get_db)):
 def papers_per_venue_per_year(db: SQLiteDB = Depends(get_db)):
     """Paper distribution by venue and year."""
     return db.papers_per_venue_per_year()
+
+
+@router.get("/venues-total", response_model=list[dict])
+def papers_per_venue_total(db: SQLiteDB = Depends(get_db)):
+    """Paper count per venue, aggregated across all years."""
+    return db.papers_per_venue()

@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { search } from "@/lib/api";
 import { useLazyAsync } from "@/lib/hooks";
-import { cn, venueLabel } from "@/lib/utils";
+import { cn, venueLabel, VENUES } from "@/lib/utils";
 import type { SearchRequest } from "@/lib/types";
 import Spinner from "@/components/Spinner";
 import ErrorAlert from "@/components/ErrorAlert";
@@ -147,13 +147,14 @@ export default function SearchPage() {
               <select
                 value={venue}
                 onChange={(e) => setVenue(e.target.value)}
-                className="input !w-32 !py-1.5 text-xs"
+                className="input !w-44 !py-1.5 text-xs"
               >
                 <option value="">All</option>
-                <option value="acl">ACL</option>
-                <option value="emnlp">EMNLP</option>
-                <option value="naacl">NAACL</option>
-                <option value="findings">Findings</option>
+                {VENUES.map((v) => (
+                  <option key={v.value} value={v.value}>
+                    {v.label}
+                  </option>
+                ))}
               </select>
             </div>
             {(yearMin || yearMax || venue) && (

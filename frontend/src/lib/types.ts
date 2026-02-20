@@ -10,9 +10,11 @@ export interface SearchRequest {
 
 export interface PaperBrowseParams {
   venue?: string | null;
+  volume?: string | null;
   year?: number | null;
   method?: string | null;
   dataset?: string | null;
+  author?: string | null;
   limit?: number;
   offset?: number;
 }

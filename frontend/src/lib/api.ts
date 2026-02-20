@@ -72,10 +72,24 @@ export function search(req: SearchRequest): Promise<SearchResponse> {
 
 // ── Papers ──────────────────────────────────────────────────────────
 
+/**
+ * Resolve a composite venue value (e.g. "findings-acl") into
+ * separate venue + volume query params for the API.
+ */
+function resolveVenueParams(
+  params: PaperBrowseParams,
+): Record<string, unknown> {
+  const { venue, ...rest } = params;
+  if (venue && venue.startsWith("findings-")) {
+    return { ...rest, venue: "findings", volume: venue.slice("findings-".length) };
+  }
+  return { ...rest, venue };
+}
+
 export function getPapers(
   params: PaperBrowseParams = {},
 ): Promise<PaperListResponse> {
-  return request(`/papers${qs(params as Record<string, unknown>)}`);
+  return request(`/papers${qs(resolveVenueParams(params))}`);
 }
 
 export function getPaper(id: string): Promise<PaperDetail> {
@@ -124,4 +138,10 @@ export function getVenues(): Promise<
   Array<{ venue: string; paper_count: number }>
 > {
   return request("/analytics/venues");
+}
+
+export function getVenuesTotals(): Promise<
+  Array<{ venue: string; paper_count: number }>
+> {
+  return request("/analytics/venues-total");
 }

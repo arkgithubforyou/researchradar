@@ -21,25 +21,29 @@ router = APIRouter(prefix="/papers", tags=["papers"])
 @router.get("", response_model=PaperListResponse)
 def browse_papers(
     venue: str | None = None,
+    volume: str | None = None,
     year: int | None = None,
     method: str | None = None,
     dataset: str | None = None,
+    author: str | None = None,
     limit: int = 20,
     offset: int = 0,
     db: SQLiteDB = Depends(get_db),
 ):
     """Browse papers with optional filters."""
     req = PaperBrowseRequest(
-        venue=venue, year=year, method=method, dataset=dataset,
-        limit=limit, offset=offset,
+        venue=venue, volume=volume, year=year, method=method,
+        dataset=dataset, author=author, limit=limit, offset=offset,
     )
-    rows = db.browse_papers(
-        venue=req.venue, year=req.year, method=req.method,
-        dataset=req.dataset, limit=req.limit, offset=req.offset,
+    filter_kwargs = dict(
+        venue=req.venue, volume=req.volume, year=req.year,
+        method=req.method, dataset=req.dataset, author=req.author,
     )
+    total = db.count_papers(**filter_kwargs)
+    rows = db.browse_papers(**filter_kwargs, limit=req.limit, offset=req.offset)
     papers = [PaperSummary(**r) for r in rows]
     return PaperListResponse(
-        papers=papers, count=len(papers), limit=req.limit, offset=req.offset,
+        papers=papers, count=total, limit=req.limit, offset=req.offset,
     )
 
 
