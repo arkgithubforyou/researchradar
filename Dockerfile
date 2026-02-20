@@ -1,3 +1,7 @@
+# Hugging Face Spaces Dockerfile
+# Free tier: 2 vCPU, 16 GB RAM, 50 GB ephemeral disk
+# Must listen on port 7860, runs as UID 1000
+
 # ── Stage 1: Build frontend ─────────────────────────────────────────
 FROM node:22-slim AS frontend
 
@@ -12,7 +16,6 @@ FROM python:3.12-slim AS builder
 
 WORKDIR /build
 
-# Install build deps for native extensions (numpy, scipy, etc.)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc g++ && \
     rm -rf /var/lib/apt/lists/*
@@ -20,7 +23,25 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
-# ── Stage 3: Runtime ────────────────────────────────────────────────
+# ── Stage 3: Download pre-built data from HF dataset ────────────────
+FROM python:3.12-slim AS data
+
+WORKDIR /data
+
+# Install huggingface_hub for downloading
+RUN pip install --no-cache-dir huggingface_hub
+
+# Download pre-built SQLite DB and ChromaDB from HF dataset repo
+RUN python -c "\
+from huggingface_hub import snapshot_download; \
+snapshot_download( \
+    repo_id='thearkforyou/researchradar-data', \
+    repo_type='dataset', \
+    local_dir='/data', \
+    allow_patterns=['researchradar.db', 'chroma_db/**'], \
+)"
+
+# ── Stage 4: Runtime ────────────────────────────────────────────────
 FROM python:3.12-slim
 
 WORKDIR /app
@@ -35,30 +56,36 @@ ENV NLTK_DATA=/usr/share/nltk_data
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
-# Create non-root user
-RUN groupadd --gid 1000 appuser && \
-    useradd --uid 1000 --gid 1000 --create-home appuser
+# HF Spaces runs as UID 1000 — create matching user
+RUN useradd -m -u 1000 user
 
-# Copy application code
-COPY src/ ./src/
-COPY scripts/ ./scripts/
+# Copy application code (owned by user)
+COPY --chown=user src/ ./src/
+COPY --chown=user scripts/ ./scripts/
 
 # Copy frontend build
-COPY --from=frontend /frontend/dist ./frontend/dist
+COPY --chown=user --from=frontend /frontend/dist ./frontend/dist
 
-# Data dir (mount or copy at runtime)
-RUN mkdir -p /app/data && chown appuser:appuser /app/data
-VOLUME /app/data
+# Copy pre-built data from the data stage
+COPY --chown=user --from=data /data/researchradar.db ./data/researchradar.db
+COPY --chown=user --from=data /data/chroma_db ./data/chroma_db
 
-# Model cache (sentence-transformers downloads on first run)
+# Model cache — download embedding model at build time for fast startup
 ENV HF_HOME=/app/.cache/huggingface
-RUN mkdir -p /app/.cache/huggingface && chown -R appuser:appuser /app/.cache
+RUN mkdir -p /app/.cache/huggingface && \
+    python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('BAAI/bge-base-en-v1.5')" && \
+    python -c "from sentence_transformers import CrossEncoder; CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')" && \
+    chown -R user:user /app/.cache
 
-USER appuser
+# Default to Groq (cloud LLM) — key set via HF Spaces secrets
+ENV LLM_BACKEND=groq
+ENV SQLITE_DB_PATH=/app/data/researchradar.db
+ENV CHROMA_DB_PATH=/app/data/chroma_db
 
-EXPOSE 8000
+USER user
+ENV HOME=/home/user
+ENV PATH=/home/user/.local/bin:$PATH
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')" || exit 1
+EXPOSE 7860
 
-CMD ["uvicorn", "src.api.app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "src.api.app:app", "--host", "0.0.0.0", "--port", "7860"]
