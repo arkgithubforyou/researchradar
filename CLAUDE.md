@@ -41,6 +41,7 @@ LLM: Ollama/Qwen2.5-14B local, Groq API cloud | AWS S3 (DB snapshots)
 - [x] Phase 5: FastAPI endpoints (17 routes), eval framework, annotation pipeline, ablation study
 - [x] Phase 6: Docker Compose, deploy, CI/CD, Terraform
 - [x] Phase 7: React frontend (Search, Browse, Paper Detail, Dashboard), static serving, rate limiting, HTTPS Terraform
+- [ ] Phase 8: Full-text extraction (IN PROGRESS — see below)
 
 ## API
 
@@ -52,8 +53,8 @@ LLM: Ollama/Qwen2.5-14B local, Groq API cloud | AWS S3 (DB snapshots)
 | `POST /api/search` | RAG search with year/venue filters |
 | `GET /api/papers` | Browse with filters |
 | `GET /api/papers/{id}` | Paper detail (`:path` for `::` IDs) |
-| `POST /api/analytics/trends/{type}` | Trend by entity (methods/datasets/tasks/topics) |
-| `GET /api/analytics/top/{type}` | Top-N ranking (methods/datasets/tasks/topics) |
+| `POST /api/analytics/{type}/trend` | Trend by entity (methods/datasets/tasks/topics) |
+| `GET /api/analytics/{type}/top` | Top-N ranking (methods/datasets/tasks/topics) |
 | `GET /api/analytics/cooccurrence/{type}` | Co-occurrence (method-dataset, method-task) |
 | `GET /api/analytics/stats` | Enrichment stats |
 | `GET /api/analytics/growth` | Papers per year |
@@ -118,24 +119,29 @@ Services: `api` (FastAPI :8000), `ollama` (LLM :11434), `ingest`/`enrich` (one-s
 
 `.github/workflows/deploy.yml` — On merge to `main`: build image → push to ECR (tagged SHA + latest) → update ECS task def → deploy to Fargate. Requires `AWS_DEPLOY_ROLE_ARN` secret (OIDC, no long-lived keys).
 
+`.github/workflows/keep-alive.yml` — Cron every 12h, pings HF Space `/api/health` to prevent 48h sleep. Needs `HF_SPACE_URL` repo variable.
+
 ## Infrastructure (Terraform)
 
 Three deployment options:
 
-### Hugging Face Spaces — Free ($0/month, easiest)
+### Hugging Face Spaces — Free ($0/month, easiest) ← CURRENTLY DEPLOYED
 
-`Dockerfile.hf` + `scripts/deploy_hf.sh` — Docker Space on HF free tier (2 vCPU, 16 GB RAM).
+`Dockerfile.hf` + `scripts/stage_hf.py` — Docker Space on HF free tier (2 vCPU, 16 GB RAM).
+
+**Live at**: https://thearkforyou-researchradar.hf.space
+
+**Deployment pattern**: Pre-built data approach (ingest locally → upload to HF dataset → Dockerfile downloads at build time).
+- `Dockerfile.hf`: 4-stage build — (1) Node frontend, (2) Python deps, (3) Download pre-built data from HF dataset `thearkforyou/researchradar-data`, (4) Runtime with model pre-download
+- `scripts/stage_hf.py`: Stages files for HF upload, creates README.md with HF YAML frontmatter (emoji: 🔬, sdk: docker, port: 7860)
+- Pre-downloads `BAAI/bge-base-en-v1.5` and `cross-encoder/ms-marco-MiniLM-L-6-v2` at build time
+
+**Currently deployed**: 26,544 papers (2020-2025), abstract-only (~461 MB). Full-text extraction in progress (see below).
 
 ```bash
-# One-time: create Space at huggingface.co/new-space (Docker SDK, CPU basic)
-# Set GROQ_API_KEY as a Secret in Space Settings
-huggingface-cli login
-./scripts/deploy_hf.sh <username>/researchradar
+python scripts/stage_hf.py          # stage files to hf_staging/
+cd hf_staging && git push           # push to HF Space
 ```
-
-- Sleeps after 48h inactivity; `.github/workflows/keep-alive.yml` pings every 12h to prevent this
-- Set `HF_SPACE_URL` as a GitHub repo variable for the keep-alive to work
-- Redeployments: re-run `deploy_hf.sh` or push to the HF Space repo directly
 
 ### Oracle Cloud — Always Free ($0/month, recommended for demos)
 
@@ -164,7 +170,104 @@ terraform init && terraform apply
 
 Config in `variables.tf`, outputs (ALB DNS, ECR URL) in `outputs.tf`. State backend commented out — uncomment for team use.
 
+## HF Credentials
+
+- **Token**: (stored in HF Spaces secrets and local env — do NOT commit)
+- **Username**: `thearkforyou`
+- **Space**: `thearkforyou/researchradar`
+- **Dataset repo**: `thearkforyou/researchradar-data` (holds pre-built SQLite + ChromaDB)
+- **GitHub**: `arkgithubforyou/researchradar`
+
+## Full-Text Extraction Pipeline (ONGOING)
+
+### Status
+Extracting full text from all 26,544 ACL Anthology papers (currently abstract-only).
+
+### Architecture
+Two-phase pipeline running unattended:
+
+1. **Phase A — PyMuPDF extraction** (running NOW)
+   - Script: `scripts/extract_fulltext.py` — downloads PDFs + extracts text with PyMuPDF (fitz)
+   - Watchdog: `scripts/watchdog.sh` — bash wrapper with auto-restart (MAX_RETRIES=20), launched via `nohup`
+   - Progress: tracked in `data/raw/fulltext_progress.json` (downloaded/extracted/failed lists)
+   - PDFs stored in `data/raw/pdfs/`, ~1.5 MB each
+   - After completion: **auto-reboots** to enable WSL2 (line 97 of watchdog.sh: `shutdown.exe /r /t 60`)
+
+2. **Phase B — GROBID extraction** (starts automatically after reboot)
+   - Script: `scripts/fulltext_pipeline.py` — sends PDFs to GROBID Docker container, parses TEI-XML output
+   - Watchdog: `scripts/watchdog.ps1` — PowerShell, runs via Windows Scheduled Task `ResearchRadar-Pipeline` (trigger: AtLogon)
+   - Flow: checks PyMuPDF done → waits for Docker → pulls `lfoppiano/grobid:0.8.1` → starts container on port 8070 → runs `fulltext_pipeline.py --skip-download`
+   - GROBID produces higher quality text (~90-95% vs PyMuPDF's ~85-90%): proper 2-column handling, section detection, header/footer removal
+   - Progress: tracked in `data/raw/pipeline_progress.json` (downloaded/grobid_done/grobid_failed/db_updated sets)
+   - Extracted text cached in `data/raw/tei/{safe_name}.txt`
+   - GROBID URL: `http://localhost:8070`, Docker image: `lfoppiano/grobid:0.8.1`, container name: `grobid`
+   - Estimated time: ~22 hours for 26K papers
+
+### Why the reboot?
+WSL2 is required for Docker Desktop (Linux engine). Virtual Machine Platform was enabled via `Enable-WindowsOptionalFeature` but requires a reboot to activate. Without it, Docker returns 500 errors.
+
+### Windows Scheduled Tasks
+- `ResearchRadar-Pipeline` — runs `watchdog.ps1` on login (trigger: AtLogon, runs as Admin). Handles both PyMuPDF completion check and GROBID pipeline.
+
+### Key files
+| File | Purpose |
+|------|---------|
+| `scripts/extract_fulltext.py` | PyMuPDF download + extraction (Phase A) |
+| `scripts/fulltext_pipeline.py` | GROBID extraction pipeline (Phase B) |
+| `scripts/watchdog.sh` | Bash watchdog for Phase A (nohup, auto-restart, reboot on done) |
+| `scripts/watchdog.ps1` | PowerShell watchdog for Phase B (runs on login, auto-pulls GROBID) |
+| `scripts/seed_data.py` | Build-time seeding (used for initial HF deployment, not currently active) |
+| `scripts/download_pdfs.py` | Standalone download-only script (superseded by extract_fulltext.py) |
+| `data/raw/fulltext_progress.json` | PyMuPDF progress tracker |
+| `data/raw/pipeline_progress.json` | GROBID progress tracker |
+| `data/raw/pdfs/` | Downloaded PDFs (~38 GB when complete) |
+| `data/raw/tei/` | GROBID extracted text cache |
+| `data/raw/extract_fulltext.log` | PyMuPDF pipeline log |
+| `data/raw/pipeline.log` | GROBID pipeline log |
+| `data/raw/watchdog.log` | Watchdog log |
+
+### After pipeline completes
+1. Re-chunk with fixed-size strategy (512 tokens) — currently abstract strategy (1 chunk/paper)
+2. Re-embed ~557K chunks with BAAI/bge-base-en-v1.5
+3. Re-run regex enrichment on full text
+4. Upload new SQLite + ChromaDB to `thearkforyou/researchradar-data`
+5. Redeploy HF Space (should stay within 50 GB disk / 16 GB RAM limits, estimated ~3.8 GB deployed data)
+
+### Disk space estimates
+- PDFs: ~38 GB (local only, not deployed)
+- SQLite with full text: ~2.5 GB
+- ChromaDB with 557K chunks: ~1.3 GB
+- Total deployed: ~3.8 GB (within HF 50 GB limit)
+
+## Frontend Notes
+
+- API paths (fixed in `frontend/src/lib/api.ts`):
+  - Trends: `/analytics/${type}/trend` (NOT `/analytics/trends/${type}`)
+  - Top: `/analytics/${type}/top` (NOT `/analytics/top/${type}`)
+  - Frontend `limit` param maps to backend `top_n` param
+- SPA routing: FastAPI serves `index.html` for all non-API, non-static routes (configured in `app.py`)
+- `deps.py`: calls `_db.create_schema()` on init to ensure tables exist on fresh deployments
+
+## Local Machine Specs
+
+- **CPU**: Intel Core i9-14900 (24 cores / 32 threads)
+- **RAM**: 64 GB (typically ~38 GB free)
+- **OS**: Windows (Git Bash for shell, Anaconda Python at `C:\Users\Admin\anaconda3\python.exe`)
+- **Docker**: Docker Desktop with WSL2 backend, CLI at `C:\Program Files\Docker\Docker\resources\bin\docker.exe`
+- **Note**: Git Bash may not be in PATH after reboot — use Python subprocess as fallback for shell commands
+
 ## Future TODOs
 
+- **GROBID parallel acceleration**: Current run uses 1 worker + default GROBID threads. For future runs, use multi-worker + GROBID concurrency to leverage the 24-core i9:
+  ```bash
+  # Start GROBID with more threads and memory
+  docker run -d --name grobid -p 8070:8070 --memory 16g --cpus 8 \
+    -e GROBID_NB_THREADS=8 lfoppiano/grobid:0.8.1
+  # Run pipeline with parallel workers
+  python scripts/fulltext_pipeline.py --skip-download --workers 8
+  ```
+  Each GROBID engine instance uses ~500 MB RAM. With 64 GB available, can safely run 16 threads (8 GB for GROBID). Expected speedup: ~4-5x (12h → 2.5-3h). The `fulltext_pipeline.py` `grobid_extract_all()` function currently processes sequentially — would need a `ThreadPoolExecutor` to send concurrent requests.
 - **Full-text enrichment**: Currently `EnrichmentPipeline._extract_text()` (pipeline.py:139) only uses title + abstract. Extend to support full paper text (from chunks table or full_text column) for higher-recall entity extraction. Key touchpoints: `_extract_text()`, `_get_unenriched_papers()` SQL query, and LLM prompt token budget (abstracts are ~200 tokens; full papers are ~5k-10k, may need chunked extraction or summarize-then-extract).
 - **Entity-boosted retrieval**: Connect enrichment tags to the retrieval pipeline — extract entities from user queries, boost papers sharing those entities in ranking (see `src/retrieval/pipeline.py`).
+- **Query expansion**: Use LLM to expand user queries with synonyms/related terms before retrieval.
+- **Citation graph**: Parse references from GROBID TEI-XML to build a citation network for graph-based retrieval features.

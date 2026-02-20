@@ -102,6 +102,9 @@ class ChromaStore:
 
     def reset(self):
         """Delete and recreate the collection."""
-        self.client.delete_collection(self.COLLECTION_NAME)
+        try:
+            self.client.delete_collection(self.COLLECTION_NAME)
+        except Exception:
+            pass  # Collection may not exist
         self._collection = None
         logger.info("ChromaDB collection reset")
