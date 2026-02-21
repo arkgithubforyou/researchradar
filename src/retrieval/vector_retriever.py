@@ -37,9 +37,10 @@ class VectorRetriever:
             where: Optional ChromaDB metadata filter.
 
         Returns:
-            List of dicts with keys: chunk_id, score, document, metadata.
+            List of dicts with keys: chunk_id, score, metadata.
             Score is 1 - cosine_distance (higher = more similar).
             Sorted by descending score.
+            (Chunk text is resolved from SQLite by the retrieval pipeline.)
         """
         query_embedding = self.embedding_generator.encode_query(query)
         results = self.chroma_store.query(
@@ -52,7 +53,6 @@ class VectorRetriever:
         # Convert to similarity scores: score = 1 - distance.
         ids = results["ids"][0]
         distances = results["distances"][0]
-        documents = results["documents"][0]
         metadatas = results["metadatas"][0]
 
         scored = []
@@ -60,7 +60,6 @@ class VectorRetriever:
             scored.append({
                 "chunk_id": _parse_chunk_id(ids[i]),
                 "score": 1.0 - distances[i],
-                "document": documents[i],
                 "metadata": metadatas[i],
             })
 
