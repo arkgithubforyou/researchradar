@@ -5,11 +5,35 @@ Embeddings are generated externally (see embeddings.py) and stored here.
 """
 
 import logging
+import sqlite3
 from pathlib import Path
 
 import chromadb
 
 logger = logging.getLogger(__name__)
+
+
+def _migrate_chroma_schema(persist_path: str) -> None:
+    """Add missing columns to ChromaDB's internal SQLite if needed.
+
+    chromadb 0.4.x expects a ``topic`` column on the ``collections`` table.
+    Pre-built data created with an older version may lack this column,
+    causing ``sqlite3.OperationalError: no such column: collections.topic``
+    at query time.  We patch it up before ChromaDB opens the DB.
+    """
+    db_file = Path(persist_path) / "chroma.sqlite3"
+    if not db_file.exists():
+        return
+    try:
+        conn = sqlite3.connect(str(db_file))
+        cols = [row[1] for row in conn.execute("PRAGMA table_info(collections)").fetchall()]
+        if "topic" not in cols:
+            logger.warning("ChromaDB migration: adding missing 'topic' column to collections table")
+            conn.execute("ALTER TABLE collections ADD COLUMN topic TEXT NOT NULL DEFAULT ''")
+            conn.commit()
+        conn.close()
+    except Exception as exc:
+        logger.error("ChromaDB schema migration failed: %s", exc)
 
 
 class ChromaStore:
@@ -21,6 +45,7 @@ class ChromaStore:
         self.persist_path = str(persist_path)
         self._client = None
         self._collection = None
+        _migrate_chroma_schema(self.persist_path)
 
     @property
     def client(self) -> chromadb.ClientAPI:
@@ -41,16 +66,18 @@ class ChromaStore:
         self,
         ids: list[str],
         embeddings: list[list[float]],
-        documents: list[str],
         metadatas: list[dict],
         batch_size: int = 500,
     ):
         """Add embeddings to the collection in batches.
 
+        Document texts are NOT stored in ChromaDB to avoid redundancy —
+        they already live in SQLite and are resolved at query time by
+        the retrieval pipeline.  This cuts chroma.sqlite3 size by ~40%.
+
         Args:
             ids: Unique string IDs for each embedding (chunk IDs).
             embeddings: Pre-computed embedding vectors.
-            documents: Original chunk texts.
             metadatas: Metadata dicts (paper_id, year, venue, chunk_type).
             batch_size: Number of embeddings per batch.
         """
@@ -60,7 +87,6 @@ class ChromaStore:
             self.collection.add(
                 ids=ids[i:end],
                 embeddings=embeddings[i:end],
-                documents=documents[i:end],
                 metadatas=metadatas[i:end],
             )
         logger.info("Added %d embeddings to ChromaDB", total)
@@ -79,11 +105,13 @@ class ChromaStore:
             where: Optional metadata filter (e.g., {"year": {"$gte": 2020}}).
 
         Returns:
-            ChromaDB query result dict with ids, documents, metadatas, distances.
+            ChromaDB query result dict with ids, metadatas, distances.
+            Documents are NOT stored/returned — text lives in SQLite only.
         """
         kwargs = {
             "query_embeddings": [query_embedding],
             "n_results": n_results,
+            "include": ["metadatas", "distances"],
         }
         if where:
             kwargs["where"] = where
@@ -91,10 +119,10 @@ class ChromaStore:
         return self.collection.query(**kwargs)
 
     def get_by_paper_id(self, paper_id: str) -> dict:
-        """Get all chunks for a specific paper."""
+        """Get all chunk embeddings/metadata for a specific paper."""
         return self.collection.get(
             where={"paper_id": paper_id},
-            include=["documents", "metadatas", "embeddings"],
+            include=["metadatas", "embeddings"],
         )
 
     def count(self) -> int:
