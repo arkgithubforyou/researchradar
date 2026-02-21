@@ -97,12 +97,24 @@ class RAGEngine:
 
         # Step 3: Build prompt and generate
         prompt = build_prompt(question, context)
-        gen_result: GenerationResult = self.llm.generate(
-            prompt=prompt,
-            system_prompt=self.config.system_prompt,
-            max_tokens=self.config.max_tokens,
-            temperature=self.config.temperature,
-        )
+        try:
+            gen_result: GenerationResult = self.llm.generate(
+                prompt=prompt,
+                system_prompt=self.config.system_prompt,
+                max_tokens=self.config.max_tokens,
+                temperature=self.config.temperature,
+            )
+        except Exception as exc:
+            logger.error("LLM generation failed: %s", exc)
+            gen_result = GenerationResult(
+                answer=(
+                    "⚠ The language model is temporarily unavailable. "
+                    "Here are the most relevant papers found for your query — "
+                    "browse the sources below for details."
+                ),
+                model="none (generation failed)",
+                usage={},
+            )
 
         # Step 4: Build source list (deduplicated by paper_id)
         seen_papers: set[str] = set()

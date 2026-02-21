@@ -55,8 +55,17 @@ def init_components(config: Config | None = None) -> None:
     llm: LLMBackend
     if _config.llm_backend == "groq" and _config.groq_api_key:
         llm = GroqBackend(api_key=_config.groq_api_key)
+        logger.info("LLM backend: Groq (model=%s)", llm.model)
     else:
         llm = OllamaBackend(host=_config.ollama_host)
+        if _config.llm_backend == "groq":
+            logger.warning(
+                "LLM_BACKEND=groq but GROQ_API_KEY is empty — "
+                "falling back to Ollama at %s",
+                _config.ollama_host,
+            )
+        else:
+            logger.info("LLM backend: Ollama at %s", _config.ollama_host)
 
     _rag_engine = RAGEngine(pipeline, llm)
     logger.info("All components initialized")

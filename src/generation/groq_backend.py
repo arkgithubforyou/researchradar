@@ -51,12 +51,16 @@ class GroqBackend(LLMBackend):
 
         logger.info("Groq request: model=%s, tokens=%d", self.model, max_tokens)
 
-        response = self._client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            max_tokens=max_tokens,
-            temperature=temperature,
-        )
+        try:
+            response = self._client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                max_tokens=max_tokens,
+                temperature=temperature,
+            )
+        except Exception as exc:
+            logger.error("Groq API error: %s", exc)
+            raise RuntimeError(f"Groq API call failed: {exc}") from exc
 
         choice = response.choices[0]
         answer = choice.message.content or ""

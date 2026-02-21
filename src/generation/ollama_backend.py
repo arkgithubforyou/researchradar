@@ -59,12 +59,22 @@ class OllamaBackend(LLMBackend):
 
         logger.info("Ollama request: model=%s, tokens=%d", self.model, max_tokens)
 
-        resp = requests.post(
-            f"{self.host}/api/chat",
-            json=payload,
-            timeout=120,
-        )
-        resp.raise_for_status()
+        try:
+            resp = requests.post(
+                f"{self.host}/api/chat",
+                json=payload,
+                timeout=120,
+            )
+            resp.raise_for_status()
+        except requests.ConnectionError as exc:
+            logger.error("Ollama server unreachable at %s: %s", self.host, exc)
+            raise RuntimeError(
+                f"Ollama server unreachable at {self.host}"
+            ) from exc
+        except requests.RequestException as exc:
+            logger.error("Ollama request failed: %s", exc)
+            raise RuntimeError(f"Ollama request failed: {exc}") from exc
+
         data = resp.json()
 
         answer = data.get("message", {}).get("content", "")
