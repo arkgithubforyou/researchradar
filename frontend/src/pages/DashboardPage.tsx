@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   TrendingUp,
   FileText,
@@ -5,10 +6,12 @@ import {
   Database,
   Tag,
   BookOpen,
+  Lightbulb,
 } from "lucide-react";
 import { getGrowth, getTop, getVenuesTotals, getStats } from "@/lib/api";
 import { useAsync } from "@/lib/hooks";
 import { formatCount } from "@/lib/utils";
+import type { EntityType } from "@/lib/types";
 import StatCard from "@/components/StatCard";
 import Spinner from "@/components/Spinner";
 import GrowthChart from "@/components/GrowthChart";
@@ -16,6 +19,7 @@ import TopEntitiesChart from "@/components/TopEntitiesChart";
 import VenueChart from "@/components/VenueChart";
 import TrendExplorer from "@/components/TrendExplorer";
 import CooccurrenceTable from "@/components/CooccurrenceTable";
+import EntityListModal from "@/components/EntityListModal";
 
 export default function DashboardPage() {
   const { data: stats, loading: statsLoading } = useAsync(() => getStats(), []);
@@ -29,6 +33,11 @@ export default function DashboardPage() {
     () => getTop("datasets", { limit: 10 }),
     [],
   );
+
+  const [modalEntity, setModalEntity] = useState<{
+    type: EntityType;
+    label: string;
+  } | null>(null);
 
   const isLoading = statsLoading || growthLoading;
 
@@ -49,27 +58,40 @@ export default function DashboardPage() {
         </div>
       ) : (
         stats && (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5 mb-8">
             <StatCard
               label="Total Papers"
               value={formatCount(stats.total_papers)}
               icon={<FileText className="w-5 h-5" />}
+              subtitle={`${formatCount(stats.papers_with_methods)} enriched`}
             />
             <StatCard
               label="Methods"
               value={formatCount(stats.total_methods)}
               icon={<Beaker className="w-5 h-5" />}
-              subtitle={`${stats.papers_with_methods} papers enriched`}
+              subtitle="Models, techniques & frameworks"
+              onClick={() => setModalEntity({ type: "methods", label: "All Methods" })}
             />
             <StatCard
               label="Datasets"
               value={formatCount(stats.total_datasets)}
               icon={<Database className="w-5 h-5" />}
+              subtitle="Evaluation benchmarks"
+              onClick={() => setModalEntity({ type: "datasets", label: "All Datasets" })}
             />
             <StatCard
               label="Tasks"
               value={formatCount(stats.total_tasks)}
               icon={<Tag className="w-5 h-5" />}
+              subtitle="NLP/ML problem types"
+              onClick={() => setModalEntity({ type: "tasks", label: "All Tasks" })}
+            />
+            <StatCard
+              label="Topics"
+              value={formatCount(stats.total_topics)}
+              icon={<Lightbulb className="w-5 h-5" />}
+              subtitle="Research areas"
+              onClick={() => setModalEntity({ type: "topics", label: "All Topics" })}
             />
           </div>
         )
@@ -152,6 +174,15 @@ export default function DashboardPage() {
       <div className="card p-5">
         <CooccurrenceTable />
       </div>
+
+      {/* ── Entity list modal ──────────────────────────────────── */}
+      {modalEntity && (
+        <EntityListModal
+          entityType={modalEntity.type}
+          label={modalEntity.label}
+          onClose={() => setModalEntity(null)}
+        />
+      )}
     </div>
   );
 }

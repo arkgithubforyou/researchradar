@@ -42,7 +42,6 @@ export default function SearchPage() {
 
       const req: SearchRequest = {
         query: searchQuery.trim(),
-        top_k: 5,
         year_min: yearMin ? Number(yearMin) : null,
         year_max: yearMax ? Number(yearMax) : null,
         venue: venue || null,
@@ -253,39 +252,75 @@ export default function SearchPage() {
           </div>
 
           {/* Sources */}
-          {data.sources.length > 0 && (
-            <div>
-              <div className="flex items-center gap-2 mb-3 px-1">
-                <FileText className="w-4 h-4 text-gray-400" />
-                <h3 className="text-sm font-medium text-gray-700">
-                  Sources ({data.sources.length} papers)
-                </h3>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {data.sources.map((src, i) => (
-                  <Link
-                    key={`${src.paper_id}-${i}`}
-                    to={`/paper/${encodeURIComponent(src.paper_id)}`}
-                    className="card-hover p-4 group"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <h4 className="text-sm font-medium text-gray-900 group-hover:text-brand-700 transition-colors line-clamp-2">
-                        {src.title}
-                      </h4>
-                      <ExternalLink className="w-3.5 h-3.5 text-gray-300 group-hover:text-brand-500 flex-shrink-0 mt-0.5" />
+          {data.sources.length > 0 && (() => {
+            const cited = data.sources.filter((s) => s.used_in_answer);
+            const alsoRelevant = data.sources.filter((s) => !s.used_in_answer);
+
+            const SourceCard = ({ src, idx }: { src: typeof data.sources[0]; idx: number }) => (
+              <Link
+                key={`${src.paper_id}-${idx}`}
+                to={`/paper/${encodeURIComponent(src.paper_id)}`}
+                className="card-hover p-4 group"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <h4 className="text-sm font-medium text-gray-900 group-hover:text-brand-700 transition-colors line-clamp-2">
+                    {src.title}
+                  </h4>
+                  <ExternalLink className="w-3.5 h-3.5 text-gray-300 group-hover:text-brand-500 flex-shrink-0 mt-0.5" />
+                </div>
+                {src.authors && src.authors.length > 0 && (
+                  <p className="text-xs text-gray-500 mt-1 line-clamp-1">
+                    {src.authors.join(", ")}
+                  </p>
+                )}
+                <div className="flex items-center gap-2 mt-2">
+                  <span className="badge-blue">{venueLabel(src.venue)}</span>
+                  <span className="flex items-center gap-1 text-xs text-gray-400">
+                    <Clock className="w-3 h-3" />
+                    {src.year}
+                  </span>
+                </div>
+              </Link>
+            );
+
+            return (
+              <div className="space-y-5">
+                {/* Cited sources */}
+                {cited.length > 0 && (
+                  <div>
+                    <div className="flex items-center gap-2 mb-3 px-1">
+                      <FileText className="w-4 h-4 text-brand-500" />
+                      <h3 className="text-sm font-medium text-gray-700">
+                        Sources cited in answer ({cited.length})
+                      </h3>
                     </div>
-                    <div className="flex items-center gap-2 mt-2">
-                      <span className="badge-blue">{venueLabel(src.venue)}</span>
-                      <span className="flex items-center gap-1 text-xs text-gray-400">
-                        <Clock className="w-3 h-3" />
-                        {src.year}
-                      </span>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {cited.map((src, i) => (
+                        <SourceCard key={src.paper_id} src={src} idx={i} />
+                      ))}
                     </div>
-                  </Link>
-                ))}
+                  </div>
+                )}
+
+                {/* Also relevant */}
+                {alsoRelevant.length > 0 && (
+                  <div>
+                    <div className="flex items-center gap-2 mb-3 px-1">
+                      <FileText className="w-4 h-4 text-gray-400" />
+                      <h3 className="text-sm font-medium text-gray-500">
+                        Also relevant ({alsoRelevant.length})
+                      </h3>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {alsoRelevant.map((src, i) => (
+                        <SourceCard key={src.paper_id} src={src} idx={i} />
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* New search prompt */}
           <div className="text-center pt-4">

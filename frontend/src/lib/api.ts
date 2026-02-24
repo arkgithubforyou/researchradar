@@ -17,6 +17,7 @@ import type {
   GrowthPoint,
   HealthResponse,
   EntityType,
+  EntityListItem,
 } from "./types";
 
 const BASE = "/api";
@@ -144,4 +145,11 @@ export function getVenuesTotals(): Promise<
   Array<{ venue: string; paper_count: number }>
 > {
   return request("/analytics/venues-total");
+}
+
+export function getEntityList(
+  type: EntityType,
+  params?: { limit?: number },
+): Promise<EntityListItem[]> {
+  return request(`/analytics/${type}/list${qs(params ?? {})}`);
 }

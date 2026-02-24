@@ -188,6 +188,11 @@ export default function BrowsePage() {
                   <h3 className="text-sm font-semibold text-gray-900 group-hover:text-brand-700 transition-colors line-clamp-2">
                     {paper.title}
                   </h3>
+                  {paper.authors && paper.authors.length > 0 && (
+                    <p className="text-xs text-gray-500 mt-1 line-clamp-1">
+                      {paper.authors.join(", ")}
+                    </p>
+                  )}
                   {paper.abstract && (
                     <p className="text-xs text-gray-500 mt-1.5 line-clamp-2">
                       {truncate(paper.abstract, 250)}

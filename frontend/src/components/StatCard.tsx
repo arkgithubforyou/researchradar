@@ -5,11 +5,16 @@ interface StatCardProps {
   value: string | number;
   icon: ReactNode;
   subtitle?: string;
+  onClick?: () => void;
 }
 
-export default function StatCard({ label, value, icon, subtitle }: StatCardProps) {
+export default function StatCard({ label, value, icon, subtitle, onClick }: StatCardProps) {
+  const Wrapper = onClick ? "button" : "div";
   return (
-    <div className="card p-5">
+    <Wrapper
+      className={`card p-5 text-left w-full ${onClick ? "cursor-pointer hover:shadow-md hover:border-brand-200 transition-all" : ""}`}
+      onClick={onClick}
+    >
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm font-medium text-gray-500">{label}</p>
@@ -22,6 +27,6 @@ export default function StatCard({ label, value, icon, subtitle }: StatCardProps
           {icon}
         </div>
       </div>
-    </div>
+    </Wrapper>
   );
 }

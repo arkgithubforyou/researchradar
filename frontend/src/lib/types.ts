@@ -31,6 +31,8 @@ export interface SourcePaper {
   year: number;
   venue: string | null;
   chunk_type: string;
+  authors?: string[];
+  used_in_answer?: boolean;
 }
 
 export interface SearchResponse {
@@ -47,6 +49,7 @@ export interface PaperSummary {
   year: number | null;
   venue: string | null;
   url: string | null;
+  authors?: string[];
 }
 
 export interface PaperDetail {
@@ -111,6 +114,11 @@ export interface HealthResponse {
   status: string;
   paper_count: number;
   chunk_count: number;
+}
+
+export interface EntityListItem {
+  name: string;
+  count: number;
 }
 
 // Entity type for analytics endpoints
