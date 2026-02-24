@@ -32,6 +32,7 @@ env/
 # OS
 .DS_Store
 Thumbs.db
+nul
 
 # Terraform (AWS)
 terraform/.terraform/
@@ -51,6 +52,7 @@ terraform-oci/*.tfvars
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
+frontend/tsconfig.tsbuildinfo
 
 # Misc
 *.log
