@@ -48,6 +48,7 @@ def init_components(config: Config | None = None) -> None:
         chroma_store=_chroma,
         embedding_generator=embed_gen,
         reranker=reranker,
+        bm25_index_path=_config.bm25_index_path,
     )
     pipeline.build_index()
 

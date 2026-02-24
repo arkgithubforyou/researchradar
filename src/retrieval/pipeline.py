@@ -6,6 +6,7 @@ and resolves chunk IDs to full chunk data from SQLite.
 
 import logging
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from src.ingestion.embeddings import EmbeddingGenerator
 from src.retrieval.bm25_retriever import BM25Retriever
@@ -57,9 +58,11 @@ class RetrievalPipeline:
         embedding_generator: EmbeddingGenerator,
         reranker: CrossEncoderReranker | None = None,
         config: RetrievalConfig | None = None,
+        bm25_index_path: Path | None = None,
     ):
         self.db = db
         self.config = config or RetrievalConfig()
+        self.bm25_index_path = bm25_index_path
 
         # Build sub-components
         self.bm25 = BM25Retriever(db)
@@ -73,7 +76,13 @@ class RetrievalPipeline:
         self._chunk_map: dict[int, dict] | None = None
 
     def build_index(self) -> int:
-        """Build the BM25 index. Must be called before search."""
+        """Build the BM25 index. Loads pre-built index if available, otherwise builds from scratch."""
+        if self.bm25_index_path and self.bm25_index_path.exists():
+            return self.bm25.load_index(self.bm25_index_path)
+        logger.warning(
+            "Pre-built BM25 index not found at %s — rebuilding from scratch (slow)",
+            self.bm25_index_path,
+        )
         return self.bm25.build_index()
 
     def _ensure_chunk_map(self):

@@ -29,8 +29,8 @@ LLM: Ollama/Qwen2.5-14B local, Groq API cloud | AWS S3 (DB snapshots)
 - `src/api/` — `app.py` (FastAPI factory + lifespan + SPA serving), `deps.py` (DI singletons), `models.py` (18 Pydantic schemas), `routes_search.py` (rate-limited), `routes_papers.py`, `routes_analytics.py`, `rate_limit.py`
 - `frontend/` — React SPA: `src/pages/` (Search, Browse, Paper, Dashboard), `src/components/` (Layout, StatCard, EntityListModal, charts, tables), `src/lib/` (api.ts, types.ts, hooks.ts)
 - `src/evaluation/` — `metrics.py` (P@K, R@K, MRR, NDCG, ROUGE-L), `dataset.py` (eval dataset loader), `runner.py` (eval runner), `ablation.py` (ablation study framework)
-- `scripts/` — `ingest.py`, `enrich.py`, `smoke_test_llm.py`, `write_questions.py`, `annotate.py`, `annotate_generation.py`, `retrieval_eval.py`, `run_ablation.py`, `embed_chunks.py`, `extract_fulltext.py`, `fulltext_pipeline.py`
-- `data/` — `questions.json`, `eval_set.json`, `researchradar.db`, `chroma_db/`, `raw/`
+- `scripts/` — `ingest.py`, `enrich.py`, `smoke_test_llm.py`, `write_questions.py`, `annotate.py`, `annotate_generation.py`, `retrieval_eval.py`, `run_ablation.py`, `embed_chunks.py`, `extract_fulltext.py`, `fulltext_pipeline.py`, `build_bm25_index.py`
+- `data/` — `questions.json`, `eval_set.json`, `researchradar.db`, `chroma_db/`, `bm25_index.pkl`, `raw/`
 
 ## Progress
 
@@ -67,7 +67,9 @@ DI via module singletons in `deps.py`. Lifespan loads models once at startup; `i
 
 **Live at**: https://thearkforyou-researchradar.hf.space (HF Spaces free tier)
 
-**Currently deployed**: 26,544 papers, 394,777 chunks. Data: SQLite 2.39 GB + ChromaDB 8.56 GB = ~10.95 GB total.
+**Currently deployed**: 26,544 papers, 394,777 chunks. Data: SQLite 2.39 GB + ChromaDB 8.56 GB + BM25 index ~200 MB = ~11.1 GB total.
+
+**Pre-serialized BM25**: The BM25 index is pre-built locally (`python -m scripts.build_bm25_index`), uploaded to the HF dataset repo as `bm25_index.pkl`, and downloaded at Docker build time. Startup loads the pickle (~1s) instead of tokenizing 394K chunks (~16 min). Falls back to live rebuild if the file is missing.
 
 HF free tier limits: 2 vCPU, 16 GB RAM, 50 GB disk, ~30 min Docker build timeout. See DEV_README.md for full resource analysis and scaling projections.
 

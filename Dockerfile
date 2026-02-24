@@ -38,7 +38,7 @@ snapshot_download( \
     repo_id='thearkforyou/researchradar-data', \
     repo_type='dataset', \
     local_dir='/data', \
-    allow_patterns=['researchradar.db', 'chroma_db/**'], \
+    allow_patterns=['researchradar.db', 'chroma_db/**', 'bm25_index.pkl'], \
 )"
 
 # ── Stage 4: Runtime ────────────────────────────────────────────────
@@ -69,6 +69,7 @@ COPY --chown=user --from=frontend /frontend/dist ./frontend/dist
 # Copy pre-built data from the data stage
 COPY --chown=user --from=data /data/researchradar.db ./data/researchradar.db
 COPY --chown=user --from=data /data/chroma_db ./data/chroma_db
+COPY --chown=user --from=data /data/bm25_index.pkl ./data/bm25_index.pkl
 
 # Model cache — download embedding model at build time for fast startup
 ENV HF_HOME=/app/.cache/huggingface
@@ -81,6 +82,7 @@ RUN mkdir -p /app/.cache/huggingface && \
 ENV LLM_BACKEND=groq
 ENV SQLITE_DB_PATH=/app/data/researchradar.db
 ENV CHROMA_DB_PATH=/app/data/chroma_db
+ENV BM25_INDEX_PATH=/app/data/bm25_index.pkl
 
 USER user
 ENV HOME=/home/user

@@ -5,6 +5,8 @@ scored chunk IDs for a given query.
 """
 
 import logging
+import pickle
+from pathlib import Path
 
 import nltk
 from nltk.tokenize import word_tokenize
@@ -56,6 +58,27 @@ class BM25Retriever:
         self._chunk_ids = ids
         logger.info("BM25 index built with %d chunks", len(ids))
         return len(ids)
+
+    def save_index(self, path: Path) -> None:
+        """Serialize the BM25 index and chunk IDs to a pickle file."""
+        if not self.is_built:
+            raise RuntimeError("BM25 index not built — nothing to save")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "wb") as f:
+            pickle.dump((self._index, self._chunk_ids), f, protocol=pickle.HIGHEST_PROTOCOL)
+        size_mb = path.stat().st_size / (1024 * 1024)
+        logger.info("BM25 index saved to %s (%.1f MB, %d chunks)", path, size_mb, len(self._chunk_ids))
+
+    def load_index(self, path: Path) -> int:
+        """Load a pre-built BM25 index from a pickle file.
+
+        Returns:
+            Number of chunks in the loaded index.
+        """
+        with open(path, "rb") as f:
+            self._index, self._chunk_ids = pickle.load(f)
+        logger.info("Loaded pre-built BM25 index (%d chunks) from %s", len(self._chunk_ids), path)
+        return len(self._chunk_ids)
 
     def search(
         self, query: str, top_k: int = 50

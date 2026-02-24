@@ -49,6 +49,7 @@ class Config:
     # Storage paths
     sqlite_db_path: Path = field(default=None)
     chroma_db_path: Path = field(default=None)
+    bm25_index_path: Path = field(default=None)
 
     # Data
     data_dir: Path = field(default=None)
@@ -63,6 +64,10 @@ class Config:
         if self.chroma_db_path is None:
             self.chroma_db_path = Path(
                 os.getenv("CHROMA_DB_PATH", str(self.data_dir / "chroma_db"))
+            )
+        if self.bm25_index_path is None:
+            self.bm25_index_path = Path(
+                os.getenv("BM25_INDEX_PATH", str(self.data_dir / "bm25_index.pkl"))
             )
 
     def ensure_dirs(self):

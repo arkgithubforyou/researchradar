@@ -99,7 +99,8 @@ researchradar/
 │   ├── annotate.py              # Retrieval relevance annotation
 │   ├── annotate_generation.py   # Generation quality scoring
 │   ├── retrieval_eval.py        # Per-method retrieval metrics
-│   └── run_ablation.py          # Full ablation study
+│   ├── run_ablation.py          # Full ablation study
+│   └── build_bm25_index.py     # Pre-serialize BM25 index for fast startup
 ├── Dockerfile                    # Local/AWS: 3-stage (frontend, deps, runtime)
 ├── Dockerfile.hf                 # HF Spaces: 4-stage (adds data download)
 ├── docker-compose.yml            # API + Ollama + workers
@@ -107,6 +108,7 @@ researchradar/
 └── data/                         # Runtime data (not in git)
     ├── researchradar.db          # SQLite (26K papers, 394K chunks, enrichment)
     ├── chroma_db/                # ChromaDB (394K embeddings)
+    ├── bm25_index.pkl            # Pre-built BM25 index (serialized)
     └── raw/                      # PDFs, GROBID output (local pipeline only)
 ```
 
@@ -182,6 +184,7 @@ All config is via environment variables, loaded through `src/config.py`:
 | `RERANKER_MODEL` | `cross-encoder/ms-marco-MiniLM-L-6-v2` | Cross-encoder model |
 | `SQLITE_DB_PATH` | `./data/researchradar.db` | SQLite database path |
 | `CHROMA_DB_PATH` | `./data/chroma_db` | ChromaDB directory path |
+| `BM25_INDEX_PATH` | `./data/bm25_index.pkl` | Pre-built BM25 index (pickle) |
 | `AWS_S3_BUCKET` | `researchradar-data` | S3 bucket for snapshots |
 
 ---
@@ -347,9 +350,11 @@ The mega-batch approach avoids OOM: encode 10K → store → gc.collect() → ne
 
 **Architecture**: Pre-built data pattern
 1. Data is ingested locally (GPU machine for embeddings)
-2. SQLite + ChromaDB uploaded to HF dataset repo (`thearkforyou/researchradar-data`)
-3. `Dockerfile.hf` downloads data at Docker build time via `huggingface_hub.snapshot_download()`
-4. Models (embedding + cross-encoder) are cached at build time
+2. BM25 index is pre-built locally: `python -m scripts.build_bm25_index`
+3. SQLite + ChromaDB + `bm25_index.pkl` uploaded to HF dataset repo (`thearkforyou/researchradar-data`)
+4. `Dockerfile.hf` downloads data at Docker build time via `huggingface_hub.snapshot_download()`
+5. Models (embedding + cross-encoder) are cached at build time
+6. At startup, BM25 loads from pickle (~1s) instead of tokenizing 394K chunks (~16 min)
 
 **To redeploy after data changes:**
 
@@ -583,7 +588,7 @@ If you see `DLL initialization routine failed` for onnxruntime, downgrade to `on
 `chroma-hnswlib==0.7.6` (paired with chromadb 0.5.x) causes segfaults on Windows. Use `chromadb==0.4.24` with `chroma-hnswlib==0.7.3`.
 
 ### BM25 index build slow
-The BM25 index is built from all chunks at startup. With 394K chunks, this takes ~30-60s on 2 vCPU. The health check has a 120s start-period to accommodate this.
+If a pre-built `bm25_index.pkl` is present (default in production), the BM25 index loads from pickle in ~1s. If the file is missing, it falls back to building from scratch by tokenizing all chunks (~15 min on i9-14900, ~16 min on 2 vCPU). To pre-build: `python -m scripts.build_bm25_index`, then upload to HF dataset repo.
 
 ### HF Space Docker build timeout
 The Docker build timeout on HF Spaces is ~30 min (NOT configurable — separate from `startup_duration_timeout` which only controls runtime startup). Our build is currently at ~30-35 min, with data download (`snapshot_download` in Stage 3) as the bottleneck. Scaling data size will push past this limit. See "Resource Usage & Scaling" section for projections.
