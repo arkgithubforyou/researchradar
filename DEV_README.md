@@ -444,7 +444,8 @@ Set these as Space secrets:
 | — chroma.sqlite3 | 7.54 GB | Redundant: stores embeddings in SQLite (backup) |
 | — data_level0.bin (HNSW) | 1.21 GB | Actual vector index used for queries |
 | — other (metadata, links) | 17 MB | Pickle, link lists, header |
-| **Total deployed** | ~10.95 GB | Downloaded at Docker build time |
+| **BM25 index** | 866 MB | Pre-serialized BM25Okapi + chunk IDs (pickle) |
+| **Total deployed** | ~11.8 GB | Downloaded at Docker build time |
 
 **Per-chunk storage**: ~29 KB (22.7 KB ChromaDB + 6.3 KB SQLite)
 
@@ -464,9 +465,9 @@ Only the HNSW index is needed at query time. The SQLite copy is an architectural
 
 | Resource | Limit | Current Usage | Used % | Headroom |
 |----------|-------|---------------|--------|----------|
-| **Disk** | 50 GB | ~28 GB (data + Docker layers + models) | 56% | ~22 GB |
+| **Disk** | 50 GB | ~29 GB (data + Docker layers + models) | 58% | ~21 GB |
 | **RAM** | 16 GB | ~5.5-6 GB peak | 37% | ~10 GB |
-| **Build time** | ~30 min | ~30-35 min | ~100% | Almost none |
+| **Build time** | ~30 min | ~8 min (cached) | 27% | ~22 min |
 
 ### RAM Breakdown (at startup, after first query)
 
@@ -481,23 +482,23 @@ Only the HNSW index is needed at query time. The SQLite copy is an architectural
 
 ### Docker Build Time Breakdown
 
-| Stage | Time | Scales with data? |
-|-------|------|-------------------|
-| Stage 1: npm ci + frontend build | ~3 min | No |
-| Stage 2: pip install deps | ~5 min | No |
-| **Stage 3: `snapshot_download()` ~10.9 GB** | **~10-15 min** | **Yes** |
-| Stage 4: Model download + NLTK | ~10 min | No |
-| **Total** | **~30-35 min** | |
+| Stage | Time (cold) | Time (cached) | Scales with data? |
+|-------|-------------|---------------|-------------------|
+| Stage 1: npm ci + frontend build | ~3 min | cached | No |
+| Stage 2: pip install deps | ~5 min | cached | No |
+| **Stage 3: `snapshot_download()` ~11.8 GB** | **~10-15 min** | **~1 min** | **Yes** |
+| Stage 4: Model download + NLTK | ~10 min | cached | No |
+| **Total** | **~30-35 min** | **~5-8 min** | |
 
 **Important**: HF Spaces has two separate timeouts:
-- `startup_duration_timeout` (configurable in README.md YAML, ours = 30m) — runtime startup
+- `startup_duration_timeout` (configurable in README.md YAML, ours = 30m) — runtime startup (currently ~19s with pre-built BM25)
 - Docker build timeout (~30 min, NOT configurable) — how long HF allows the image to build
 
 ### Scaling Projections
 
 | Scale | Papers | Chunks | Disk | RAM | Build Time | Fits free tier? |
 |-------|--------|--------|------|-----|------------|-----------------|
-| **1× (current)** | 26.5K | 394K | ~28 GB | ~5.5 GB | ~30-35 min | Barely |
+| **1× (current)** | 26.5K | 394K | ~29 GB | ~5.5 GB | ~8 min (cached) | Yes ✅ |
 | **2×** | ~53K | ~790K | ~39 GB | ~8-9 GB | ~45 min | Build timeout ❌ |
 | **3×** | ~80K | ~1.18M | ~50 GB | ~11-13 GB | ~55 min | Disk + build ❌ |
 

@@ -67,7 +67,7 @@ DI via module singletons in `deps.py`. Lifespan loads models once at startup; `i
 
 **Live at**: https://thearkforyou-researchradar.hf.space (HF Spaces free tier)
 
-**Currently deployed**: 26,544 papers, 394,777 chunks. Data: SQLite 2.39 GB + ChromaDB 8.56 GB + BM25 index ~200 MB = ~11.1 GB total.
+**Currently deployed**: 26,544 papers, 394,777 chunks. Data: SQLite 2.39 GB + ChromaDB 8.56 GB + BM25 index 866 MB = ~11.8 GB total.
 
 **Pre-serialized BM25**: The BM25 index is pre-built locally (`python -m scripts.build_bm25_index`), uploaded to the HF dataset repo as `bm25_index.pkl`, and downloaded at Docker build time. Startup loads the pickle (~1s) instead of tokenizing 394K chunks (~16 min). Falls back to live rebuild if the file is missing.
 
