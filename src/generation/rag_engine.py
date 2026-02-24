@@ -74,26 +74,33 @@ class RAGEngine:
         self,
         question: str,
         top_k: int = 5,
+        source_top_k: int = 20,
         where: dict | None = None,
     ) -> RAGResponse:
         """Answer a question using retrieval-augmented generation.
 
         Args:
             question: The user's natural-language question.
-            top_k: Number of chunks to retrieve as context.
+            top_k: Number of chunks used as LLM generation context.
+            source_top_k: Number of chunks to retrieve for the source list
+                (returns more papers than used for generation).
             where: Optional metadata filter for retrieval (e.g., year, venue).
 
         Returns:
             RAGResponse with the answer, source papers, and metadata.
         """
-        logger.info("RAG query: %r (top_k=%d)", question, top_k)
+        logger.info("RAG query: %r (top_k=%d, source_top_k=%d)", question, top_k, source_top_k)
 
-        # Step 1: Retrieve relevant chunks
-        results = self.pipeline.search(query=question, top_k=top_k, where=where)
+        # Step 1: Retrieve relevant chunks (more than needed for generation)
+        results = self.pipeline.search(query=question, top_k=source_top_k, where=where)
         logger.info("Retrieved %d chunks", len(results))
 
-        # Step 2: Format context
-        context = format_context(results)
+        # Step 2: Format context from top_k chunks only (for LLM prompt)
+        context_results = results[:top_k]
+        context = format_context(context_results)
+
+        # Track which papers were used for generation context
+        context_paper_ids = {r.paper_id for r in context_results}
 
         # Step 3: Build prompt and generate
         prompt = build_prompt(question, context)
@@ -116,7 +123,7 @@ class RAGEngine:
                 usage={},
             )
 
-        # Step 4: Build source list (deduplicated by paper_id)
+        # Step 4: Build source list from ALL results (deduplicated by paper_id)
         seen_papers: set[str] = set()
         sources = []
         for r in results:
@@ -128,6 +135,7 @@ class RAGEngine:
                     "year": r.year,
                     "venue": r.venue,
                     "chunk_type": r.chunk_type,
+                    "used_in_answer": r.paper_id in context_paper_ids,
                 })
 
         return RAGResponse(

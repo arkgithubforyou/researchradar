@@ -8,6 +8,7 @@ from src.api.deps import get_db
 from src.api.models import (
     CooccurrenceRow,
     EnrichmentStatsResponse,
+    EntityListItem,
     GrowthPoint,
     RankedEntity,
     TrendPoint,
@@ -117,6 +118,25 @@ def top_topics(
         RankedEntity(name=r["topic_name"], year=r["year"], count=r["count"], rank=r["rank"])
         for r in rows
     ]
+
+
+# ── Entity list endpoints ────────────────────────────────────────────
+
+VALID_ENTITY_TYPES = {"methods", "datasets", "tasks", "topics"}
+
+
+@router.get("/{entity_type}/list", response_model=list[EntityListItem])
+def entity_list(
+    entity_type: str,
+    limit: int = Query(default=500, ge=1, le=1000),
+    db: SQLiteDB = Depends(get_db),
+):
+    """List all unique entities of a type with their paper counts."""
+    if entity_type not in VALID_ENTITY_TYPES:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail=f"Unknown entity type: {entity_type}")
+    rows = db.get_entity_list(entity_type, limit=limit)
+    return [EntityListItem(**r) for r in rows]
 
 
 # ── Co-occurrence endpoints ──────────────────────────────────────────

@@ -46,6 +46,8 @@ class SourcePaper(BaseModel):
     year: int
     venue: str | None
     chunk_type: str
+    authors: list[str] = Field(default_factory=list)
+    used_in_answer: bool = False
 
 
 class SearchResponse(BaseModel):
@@ -80,6 +82,7 @@ class PaperSummary(BaseModel):
     year: int | None
     venue: str | None
     url: str | None
+    authors: list[str] = Field(default_factory=list)
 
 
 class PaperListResponse(BaseModel):
@@ -140,6 +143,13 @@ class GrowthPoint(BaseModel):
     paper_count: int
     prev_count: int | None
     growth_pct: float | None
+
+
+class EntityListItem(BaseModel):
+    """A unique entity name with its paper count."""
+
+    name: str
+    count: int
 
 
 class HealthResponse(BaseModel):

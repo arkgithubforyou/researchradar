@@ -41,6 +41,13 @@ def browse_papers(
     )
     total = db.count_papers(**filter_kwargs)
     rows = db.browse_papers(**filter_kwargs, limit=req.limit, offset=req.offset)
+
+    # Batch-fetch authors for all papers in this page
+    paper_ids = [r["id"] for r in rows]
+    authors_map = db.get_authors_for_papers(paper_ids)
+    for r in rows:
+        r["authors"] = authors_map.get(r["id"], [])
+
     papers = [PaperSummary(**r) for r in rows]
     return PaperListResponse(
         papers=papers, count=total, limit=req.limit, offset=req.offset,

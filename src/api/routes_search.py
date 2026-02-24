@@ -4,10 +4,11 @@ import logging
 
 from fastapi import APIRouter, Depends, Request
 
-from src.api.deps import get_rag_engine
+from src.api.deps import get_db, get_rag_engine
 from src.api.models import SearchRequest, SearchResponse, SourcePaper
 from src.api.rate_limit import search_limiter
 from src.generation.rag_engine import RAGEngine
+from src.storage.sqlite_db import SQLiteDB
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +20,7 @@ def search(
     request: Request,
     req: SearchRequest,
     engine: RAGEngine = Depends(get_rag_engine),
+    db: SQLiteDB = Depends(get_db),
 ):
     """Answer a research question using RAG over the paper corpus."""
     search_limiter.check(request)
@@ -43,7 +45,15 @@ def search(
     if where is None and filters:
         where = filters
 
-    response = engine.query(question=req.query, top_k=req.top_k, where=where)
+    response = engine.query(
+        question=req.query, top_k=5, source_top_k=20, where=where,
+    )
+
+    # Batch-fetch authors for all source papers
+    paper_ids = [s["paper_id"] for s in response.sources]
+    authors_map = db.get_authors_for_papers(paper_ids)
+    for s in response.sources:
+        s["authors"] = authors_map.get(s["paper_id"], [])
 
     return SearchResponse(
         answer=response.answer,

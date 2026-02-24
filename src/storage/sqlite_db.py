@@ -537,14 +537,22 @@ class SQLiteDB:
             conn.close()
 
     def get_enrichment_stats(self) -> dict:
-        """Get counts of enriched entities."""
+        """Get counts of unique enriched entities (distinct names)."""
         conn = self.get_connection()
         try:
             paper_count = conn.execute("SELECT COUNT(*) FROM papers").fetchone()[0]
-            method_count = conn.execute("SELECT COUNT(*) FROM methods").fetchone()[0]
-            dataset_count = conn.execute("SELECT COUNT(*) FROM datasets").fetchone()[0]
-            task_count = conn.execute("SELECT COUNT(*) FROM tasks").fetchone()[0]
-            topic_count = conn.execute("SELECT COUNT(*) FROM topics").fetchone()[0]
+            method_count = conn.execute(
+                "SELECT COUNT(DISTINCT method_name) FROM methods"
+            ).fetchone()[0]
+            dataset_count = conn.execute(
+                "SELECT COUNT(DISTINCT dataset_name) FROM datasets"
+            ).fetchone()[0]
+            task_count = conn.execute(
+                "SELECT COUNT(DISTINCT task_name) FROM tasks"
+            ).fetchone()[0]
+            topic_count = conn.execute(
+                "SELECT COUNT(DISTINCT topic_name) FROM topics"
+            ).fetchone()[0]
             papers_with_methods = conn.execute(
                 "SELECT COUNT(DISTINCT paper_id) FROM methods"
             ).fetchone()[0]
@@ -556,6 +564,63 @@ class SQLiteDB:
                 "total_topics": topic_count,
                 "papers_with_methods": papers_with_methods,
             }
+        finally:
+            conn.close()
+
+    def get_authors_for_papers(self, paper_ids: list[str]) -> dict[str, list[str]]:
+        """Batch-fetch authors for multiple papers.
+
+        Returns:
+            Dict mapping paper_id → list of author names (ordered by position).
+        """
+        if not paper_ids:
+            return {}
+        conn = self.get_connection()
+        try:
+            placeholders = ",".join("?" * len(paper_ids))
+            rows = conn.execute(
+                f"SELECT paper_id, name FROM authors "
+                f"WHERE paper_id IN ({placeholders}) "
+                f"ORDER BY paper_id, position",
+                paper_ids,
+            ).fetchall()
+            result: dict[str, list[str]] = {}
+            for row in rows:
+                result.setdefault(row["paper_id"], []).append(row["name"])
+            return result
+        finally:
+            conn.close()
+
+    _ENTITY_TABLE_MAP = {
+        "methods": ("methods", "method_name"),
+        "datasets": ("datasets", "dataset_name"),
+        "tasks": ("tasks", "task_name"),
+        "topics": ("topics", "topic_name"),
+    }
+
+    def get_entity_list(
+        self, entity_type: str, limit: int = 500
+    ) -> list[dict]:
+        """Get all unique entity names with their paper counts.
+
+        Args:
+            entity_type: One of "methods", "datasets", "tasks", "topics".
+            limit: Maximum entries to return.
+
+        Returns:
+            List of dicts with keys: name, count. Sorted by count descending.
+        """
+        if entity_type not in self._ENTITY_TABLE_MAP:
+            raise ValueError(f"Unknown entity type: {entity_type}")
+        table, col = self._ENTITY_TABLE_MAP[entity_type]
+        conn = self.get_connection()
+        try:
+            rows = conn.execute(
+                f"SELECT {col} AS name, COUNT(*) AS count "
+                f"FROM {table} GROUP BY {col} ORDER BY count DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+            return [dict(row) for row in rows]
         finally:
             conn.close()
 
